@@ -1,6 +1,6 @@
 import React from 'react';
 
-const Textarea = ({ value, onChange, placeholder, className, disabled }) => {
+export const Textarea = ({ value, onChange, placeholder, className, disabled }) => {
   return (
     <textarea
       value={value}
@@ -11,5 +11,3 @@ const Textarea = ({ value, onChange, placeholder, className, disabled }) => {
     />
   );
 };
-
-export default Textarea;

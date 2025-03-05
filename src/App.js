@@ -1,10 +1,10 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Button } from './components/ui/button'; // Remove @ alias
-import { Input } from './components/ui/input';   // Remove @ alias
-import { Textarea } from './components/ui/textarea'; // Remove @ alias
-//import { utils } from './lib/utils';         // Remove @ alias
-import { FileUp, MessageSquare, XCircle, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
-import { cn } from "@/lib/utils"
+import { Button } from '@mui/material';
+import { TextField } from '@mui/material';
+import { TextareaAutosize } from '@mui/material';
+import { CircularProgress } from '@mui/material';
+import { Send } from '@mui/icons-material';
+// import { cn } from "@/lib/utils" // Ensure this path is correct or remove if not needed
 
 // Mock Gemini API (replace with actual API calls in a real implementation)
 const mockGeminiAPI = {
@@ -13,7 +13,7 @@ const mockGeminiAPI = {
         await new Promise(resolve => setTimeout(resolve, 1500));
 
         // Mock summary generation
-        return `This dataset contains information about customer transactions, including dates, products, and purchase amounts.`;
+        return "This dataset contains information about customer transactions, including dates, products, and purchase amounts.";
     },
     answerQuestion: async (question, csvData) => {
         // Simulate processing time
@@ -103,7 +103,7 @@ const DataChatApp = () => {
             {/* Sidebar for File Upload and Summary */}
             <div className="w-full md:w-1/4 p-4 border-r border-gray-800 space-y-4">
                 <h1 className="text-2xl font-bold">Data Chat</h1>
-                <Input
+                <input
                     type="file"
                     accept=".csv"
                     onChange={handleFileUpload}
@@ -118,10 +118,11 @@ const DataChatApp = () => {
                             onClick={summarizeData}
                             disabled={isProcessing || !csvData}
                             className="mt-4 w-full"
+                            variant="contained"
                         >
                             {isProcessing ? (
                                 <>
-                                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                                    <CircularProgress size={20} className="mr-2" />
                                     Summarizing...
                                 </>
                             ) : (
@@ -147,19 +148,14 @@ const DataChatApp = () => {
                     {chatHistory.map((message, index) => (
                         <div
                             key={index}
-                            className={cn(
-                                "p-3 rounded-lg",
-                                message.role === 'user'
-                                    ? "bg-blue-500 text-white ml-auto w-fit max-w-[80%]"
-                                    : "bg-gray-800 mr-auto w-fit max-w-[80%]"
-                            )}
+                            className={`p-3 rounded-lg ${message.role === 'user' ? 'bg-blue-500 text-white ml-auto w-fit max-w-[80%]' : 'bg-gray-800 mr-auto w-fit max-w-[80%]'}`}
                         >
                             {message.message}
                         </div>
                     ))}
                     {isProcessing && (
                         <div className="p-3 bg-gray-800 mr-auto w-fit max-w-[80%]">
-                            <Loader2 className="mr-2 h-4 w-4 animate-spin inline-block" />
+                            <CircularProgress size={20} className="mr-2" />
                             Processing...
                         </div>
                     )}
@@ -167,7 +163,7 @@ const DataChatApp = () => {
 
                 {/* Input Area */}
                 <div className="flex items-center gap-2">
-                    <Textarea
+                    <TextField
                         value={currentQuestion}
                         onChange={(e) => setCurrentQuestion(e.target.value)}
                         placeholder="Ask a question about the data..."
@@ -183,8 +179,9 @@ const DataChatApp = () => {
                         onClick={handleSendQuestion}
                         disabled={isProcessing || !currentQuestion.trim()}
                         className="bg-blue-500 hover:bg-blue-600 text-white"
+                        variant="contained"
                     >
-                        <MessageSquare className="mr-2 h-4 w-4" />
+                        <Send className="mr-2" />
                         Send
                     </Button>
                 </div>
