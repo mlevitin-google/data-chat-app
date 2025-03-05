@@ -1,7 +1,8 @@
 import React, { useState, useRef, useEffect } from 'react';
-import { Button } from "@/components/ui/button"
-import { Input } from "@/components/ui/input"
-import { Textarea } from "@/components/ui/textarea"
+import { Button } from './components/ui/button'; // Remove @ alias
+import { Input } from './components/ui/input';   // Remove @ alias
+import { Textarea } from './components/ui/textarea'; // Remove @ alias
+//import { utils } from './lib/utils';         // Remove @ alias
 import { FileUp, MessageSquare, XCircle, CheckCircle, AlertTriangle, Loader2 } from 'lucide-react';
 import { cn } from "@/lib/utils"
 
