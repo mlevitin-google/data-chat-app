@@ -4,6 +4,8 @@ import { Send, UploadFile } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Papa from 'papaparse';
+import data1 from './data1.csv';
+import data2 from './data2.csv';
 
 const theme = createTheme({
     palette: {
@@ -595,39 +597,13 @@ const DataChatApp = () => {
                 <Grid item xs={12} md={3} sx={{ p: 2 }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>Data Chat</Typography>
                     
-                    <Paper elevation={3} sx={{ p: 2, mb: 3, backgroundColor: '#E3F2FD' }}>
-                        <Typography variant="subtitle1" sx={{ mb: 1 }}>Upload Dataset (CSV)</Typography>
-                        <input
-                            type="file"
-                            accept=".csv"
-                            onChange={handleFileUpload}
-                            style={{ display: 'none' }}
-                            id="file-upload"
-                            disabled={isProcessing}
-                        />
-                        <label htmlFor="file-upload">
-                            <Button 
-                                component="span" 
-                                variant="contained" 
-                                startIcon={<UploadFile />}
-                                fullWidth
-                                disabled={isProcessing}
-                            >
-                                Choose File
-                            </Button>
-                        </label>
-                        {csvFile && (
-                            <Typography variant="body2" sx={{ mt: 1 }}>
-                                Selected: {csvFile.name}
-                            </Typography>
-                        )}
                     </Paper>
                     
                     {dataStats && (
                         <Paper elevation={3} sx={{ p: 2, mb: 3, backgroundColor: '#CFD8DC' }}>
                             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>Dataset Info</Typography>
-                            <Typography>File: {csvFile?.name}</Typography>
-                            <Typography>Size: {csvFile ? (csvFile.size / 1024).toFixed(2) + ' KB' : 'N/A'}</Typography>
+                            <Typography>File: N/A</Typography>
+                            <Typography>Size: N/A</Typography>
                             <Typography>Rows: {dataStats.rowCount}</Typography>
                             <Typography>Columns: {dataStats.colCount}</Typography>
                             <Button

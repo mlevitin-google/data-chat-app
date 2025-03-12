@@ -1,0 +1,11 @@
+product_id,name,price,category
+1,Laptop,1200,Electronics
+2,Mouse,25,Electronics
+3,Keyboard,75,Electronics
+4,Monitor,500,Electronics
+5,Tablet,200,Electronics
+6,Phone,800,Electronics
+7,Charger,300,Electronics
+8,Headphones,150,Electronics
+9,Webcam,450,Electronics
+10,Printer,600,Electronics
