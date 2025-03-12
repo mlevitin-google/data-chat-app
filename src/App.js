@@ -4,8 +4,8 @@ import { Send, UploadFile } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Papa from 'papaparse';
-import data1 from './data1.csv';
-import data2 from './data2.csv';
+import data1 from './[CG&E DM&A Ops Pillar] 2025.H1 VMAXX Responses + Backend Data - H1 2025 Raw Data.csv';
+import data2 from './[CG&E DM&A Ops Pillar] 2025.H1 VMAXX Responses + Backend Data - H2 2024 Raw Data.csv';
 
 const theme = createTheme({
     palette: {
@@ -596,9 +596,7 @@ const DataChatApp = () => {
             }}>
                 <Grid item xs={12} md={3} sx={{ p: 2 }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>Data Chat</Typography>
-                    
-                    </Paper>
-                    
+                                      
                     {dataStats && (
                         <Paper elevation={3} sx={{ p: 2, mb: 3, backgroundColor: '#CFD8DC' }}>
                             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>Dataset Info</Typography>
