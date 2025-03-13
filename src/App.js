@@ -1,11 +1,19 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Button, Grid, Paper, Typography, Box, CircularProgress, TextField, createTheme, ThemeProvider } from '@mui/material';
-import { Send, UploadFile } from '@mui/icons-material';
+import { Send } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Papa from 'papaparse';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 import data1 from './[CG&E DM&A Ops Pillar] 2025.H1 VMAXX Responses + Backend Data - H1 2025 Raw Data.csv';
 import data2 from './[CG&E DM&A Ops Pillar] 2025.H1 VMAXX Responses + Backend Data - H2 2024 Raw Data.csv';
+
+// Get API key from environment variable
+// IMPORTANT: In your .env file, prefix with REACT_APP_ for React to access it
+const API_KEY = process.env.REACT_APP_GEMINI_API_KEY || 'AIzaSyBmC_WFCdfdV-Bj_6i_EEwri5je6d4M3pE';
+
+// Initialize Gemini API
+const genAI = new GoogleGenerativeAI(API_KEY);
 
 const theme = createTheme({
     palette: {
@@ -48,8 +56,7 @@ const DataChatApp = () => {
     const [currentQuestion, setCurrentQuestion] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const chatContainerRef = useRef(null);
-    const backendUrl = "http://localhost:3001"; //CHANGE to your backend url
-    const [sessionId, setSessionId] = useState(null);  // State for session ID
+    const [conversationHistory, setConversationHistory] = useState([]);
 
     // Helper function to compute data statistics
     const computeDataStats = (data) => {
@@ -70,8 +77,8 @@ const DataChatApp = () => {
             // Determine type
             let type = 'unknown';
             if (nonNullValues.length > 0) {
-                if (nonNullValues.every(val => typeof val === 'number')) type = 'number';
-                else if (nonNullValues.every(val => typeof val === 'boolean')) type = 'boolean';
+                if (nonNullValues.every(val => !isNaN(val) && val !== '')) type = 'number';
+                else if (nonNullValues.every(val => val === 'true' || val === 'false')) type = 'boolean';
                 else if (nonNullValues.every(val => !isNaN(Date.parse(val)))) type = 'date';
                 else type = 'string';
             }
@@ -79,10 +86,11 @@ const DataChatApp = () => {
             // Calculate numeric stats if applicable
             let numericStats = {};
             if (type === 'number') {
+                const numericValues = nonNullValues.map(v => Number(v));
                 numericStats = {
-                    min: Math.min(...nonNullValues),
-                    max: Math.max(...nonNullValues),
-                    avg: nonNullValues.reduce((sum, val) => sum + val, 0) / nonNullValues.length
+                    min: Math.min(...numericValues),
+                    max: Math.max(...numericValues),
+                    avg: numericValues.reduce((sum, val) => sum + val, 0) / numericValues.length
                 };
             }
 
@@ -153,18 +161,31 @@ const DataChatApp = () => {
     useEffect(() => {
         const loadInitialData = async () => {
             try {
-                const parsedData1 = await parseCSVData(data1);
-                const parsedData2 = await parseCSVData(data2);
-
+                const response1 = await fetch(data1);
+                const text1 = await response1.text();
+                const parsedData1 = await parseCSVData(text1);
                 setJsonData1(parsedData1);
                 setDataStats1(computeDataStats(parsedData1));
-
+                
+                const response2 = await fetch(data2);
+                const text2 = await response2.text();
+                const parsedData2 = await parseCSVData(text2);
                 setJsonData2(parsedData2);
                 setDataStats2(computeDataStats(parsedData2));
 
                 console.log("Data1 stats:", computeDataStats(parsedData1));
                 console.log("Data2 stats:", computeDataStats(parsedData2));
 
+                // Load conversation history from localStorage if available
+                const savedHistory = localStorage.getItem('chatHistory');
+                if (savedHistory) {
+                    setChatHistory(JSON.parse(savedHistory));
+                }
+
+                const savedConversation = localStorage.getItem('conversationHistory');
+                if (savedConversation) {
+                    setConversationHistory(JSON.parse(savedConversation));
+                }
             } catch (error) {
                 console.error("Error loading initial data:", error);
                 setJsonData1(null);
@@ -177,105 +198,29 @@ const DataChatApp = () => {
         loadInitialData();
     }, []);
 
-    const handleFileUpload = (event) => {
-        const file = event.target.files?.[0];
-        if (file) {
-            setCsvFile(file);
-            const reader = new FileReader();
-            reader.onload = async (e) => {
-                const content = e.target?.result;
-                if (typeof content === 'string') {
-                    Papa.parse(content, {
-                        header: true,
-                        dynamicTyping: true,
-                        complete: (results) => {
-                            if (results.data && results.data.length > 0) {
-                                // Filter out empty rows that PapaParse sometimes includes
-                                const cleanData = results.data.filter(row =>
-                                    Object.values(row).some(val => val !== null && val !== '')
-                                );
-
-                                setJsonData1(cleanData);
-                                setDataStats1(computeDataStats(cleanData));
-
-                                console.log("Parsed data stats:", computeDataStats(cleanData));
-                                console.log("Sample (first 2 rows):", cleanData.slice(0, 2));
-                            } else {
-                                setJsonData1(null);
-                                setDataStats1(null);
-                                console.error("No data parsed from CSV.");
-                            }
-                        },
-                        error: (error) => {
-                            setJsonData1(null);
-                            setDataStats1(null);
-                            console.error("Error parsing CSV:", error);
-                        }
-                    });
-                }
-            };
-            reader.readAsText(file);
-        } else {
-            resetState();
+    // Save chat history to localStorage whenever it changes
+    useEffect(() => {
+        if (chatHistory.length > 0) {
+            localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
         }
-    };
+    }, [chatHistory]);
+
+    // Save conversation history to localStorage whenever it changes
+    useEffect(() => {
+        if (conversationHistory.length > 0) {
+            localStorage.setItem('conversationHistory', JSON.stringify(conversationHistory));
+        }
+    }, [conversationHistory]);
 
     const resetState = () => {
         setCsvFile(null);
-        setJsonData1(null);
-        setDataStats1(null);
-        setJsonData2(null);
-        setDataStats2(null);
         setSummary('');
-        setChatHistory([]); // Clear chat history as well
-        setSessionId(null); // Reset the session ID
-
-        localStorage.removeItem('sessionId'); // Optionally remove sessionId from localStorage
-    };
-
-    const summarizeData = async () => {
-        //This code does nothing in the project
-        if ((!jsonData1 || !dataStats1) && (!jsonData2 || !dataStats2)) return;
-
-        setIsProcessing(true);
-        try {
-            let prompt = ``;
-            if (jsonData1 && dataStats1) {
-                const sampleData1 = jsonData1.slice(0, Math.min(100, jsonData1.length));
-
-                prompt += `Dataset 1 (H1 2025) Statistics:\n`;
-                prompt += `- Rows: ${dataStats1.rowCount}\n`;
-                prompt += `- Columns: ${dataStats1.colCount}\n`;
-                prompt += `- Column Names: ${dataStats1.columnNames.join(', ')}\n\n`;
-
-                prompt += `Here's a sample of the first few rows of Dataset 1:\n`;
-                prompt += `\`\`\`json\n${JSON.stringify(sampleData1.slice(0, 5), null, 2)}\n\`\`\`\n\n`;
-            }
-
-            if (jsonData2 && dataStats2) {
-                const sampleData2 = jsonData2.slice(0, Math.min(100, jsonData2.length));
-
-                prompt += `Dataset 2 (H2 2024) Statistics:\n`;
-                prompt += `- Rows: ${dataStats2.rowCount}\n`;
-                prompt += `- Columns: ${dataStats2.colCount}\n`;
-                prompt += `- Column Names: ${dataStats2.columnNames.join(', ')}\n\n`;
-
-                prompt += `Here's a sample of the first few rows of Dataset 2:\n`;
-                prompt += `\`\`\`json\n${JSON.stringify(sampleData2.slice(0, 5), null, 2)}\n\`\`\`\n\n`;
-            }
-
-            prompt += `Provide a concise summary of each dataset, highlighting the nature and potential insights from each.`;
-
-            console.warn("This summarization function doesn't work at all.") //this has been removed to prevent confusion to future developers
-
-            // const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-pro-exp-02-05:generateContent?key=${apiKey}`, { // THIS CODE DOESN'T WORK
-
-        } catch (error) {
-            console.error("Error summarizing data:", error);
-            setSummary("Sorry, I couldn't summarize the data.");
-        } finally {
-            setIsProcessing(false);
-        }
+        setChatHistory([]);
+        setConversationHistory([]);
+        
+        // Clear localStorage
+        localStorage.removeItem('chatHistory');
+        localStorage.removeItem('conversationHistory');
     };
 
     const handleSendQuestion = async () => {
@@ -287,40 +232,117 @@ const DataChatApp = () => {
         setCurrentQuestion('');
 
         try {
-            console.log("requesting backend"); //check if code actually made it here
-            console.log("Sending question to backend:", userQuestion);
+            // Prepare data context for the AI
+            let dataContext = "";
+            
+            if (jsonData1 && dataStats1) {
+                dataContext += `Dataset 1 (H1 2025):\n`;
+                dataContext += `- Rows: ${dataStats1.rowCount}\n`;
+                dataContext += `- Columns: ${dataStats1.colCount}\n`;
+                dataContext += `- Column Names: ${dataStats1.columnNames.join(', ')}\n\n`;
+                
+                // Include a sample of the data (first 20 rows)
+                dataContext += `Sample data from Dataset 1:\n`;
+                dataContext += JSON.stringify(jsonData1.slice(0, 20), null, 2) + "\n\n";
+            }
+            
+            if (jsonData2 && dataStats2) {
+                dataContext += `Dataset 2 (H2 2024):\n`;
+                dataContext += `- Rows: ${dataStats2.rowCount}\n`;
+                dataContext += `- Columns: ${dataStats2.colCount}\n`;
+                dataContext += `- Column Names: ${dataStats2.columnNames.join(', ')}\n\n`;
+                
+                // Include a sample of the data (first 20 rows)
+                dataContext += `Sample data from Dataset 2:\n`;
+                dataContext += JSON.stringify(jsonData2.slice(0, 20), null, 2) + "\n\n";
+            }
 
-            const requestBody = {
-                question: userQuestion,
-                sessionId: sessionId,  // Include the session ID
-            };
+            // Define system instruction
+            const systemInstruction = `
+                *** ONLY USE DATA FROM THE UNDERLYING DATASETS. DO NOT USE OTHER INFORMATION IN YOUR ANALYSIS ***
 
-            const response = await fetch(`${backendUrl}/ask-question`, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(requestBody), // Send the question and session ID to the backend
+                Role and Purpose:
+
+                    * You are an analyst on the CG&E sector team tasked with understanding insights from large datasets.
+                    * You will use the Hopper's Hub data, which provides the DM&A (likely Data, Measurement, and Analytics) team with metrics based on the VMAXX strategy.
+                    * Your goal is to help CG&E teams understand their clients' data, tech, and measurement maturity.
+                    * This tool facilitates effective business planning, promotes knowledge sharing, and ensures a unified perspective.
+
+                    Behaviors and Rules:
+
+                    1) Data Interpretation:
+                        a) Analyze the Hopper's Hub data to identify key insights and trends related to client maturity.
+                        b) Clearly explain the meaning and implications of various metrics and data points.
+                        c) Connect data insights to the VMAXX strategy and its goals.
+
+                    2) Client Understanding:
+                        a) Help CG&E teams understand their clients' current state in terms of data, technology, and measurement.
+                        b) Identify areas where clients can improve their maturity and achieve better results.
+                        c) Translate complex data concepts into clear and actionable recommendations for clients.
+
+                    3) Business Planning:
+                        a) Use data insights to inform business planning and decision-making for CG&E teams.
+                        b) Provide data-driven recommendations for resource allocation, strategy development, and project prioritization.
+                        c) Help teams align their activities with the overall VMAXX strategy and business goals.
+
+                    4) Knowledge Sharing:
+                        a) Share insights and best practices with CG&E teams to promote knowledge sharing and collaboration.
+                        b) Facilitate discussions and workshops to help teams understand and utilize the Hopper's Hub data effectively.
+                        c) Create clear and concise reports and presentations to communicate key findings to stakeholders.
+
+                    Tone and Style:
+
+                    * Maintain a professional and analytical tone.
+                    * Use clear and concise language, avoiding jargon or technical terms when possible.
+                    * Be objective and data-driven in your analysis and recommendations.
+                    * Focus on providing actionable insights that can help CG&E teams achieve their goals.
+                    
+                    *** ONLY USE DATA FROM THE UNDERLYING DATASETS. DO NOT USE OTHER INFORMATION IN YOUR ANALYSIS ***
+            `;
+
+            // Initialize the model
+            const model = genAI.getGenerativeModel({
+                model: "gemini-1.5-pro",
+                systemInstruction: systemInstruction,
             });
 
-            const data = await response.json();
-            console.log("response", data); //check the response from the backend
-
-            if (data && data.answer) {
-                setChatHistory(prev => [...prev, { role: 'gemini', message: data.answer }]);
-
-                 // Update session ID if a new one is received
-                 if (data.sessionId && data.sessionId !== sessionId) {
-                    setSessionId(data.sessionId);
-                    localStorage.setItem('sessionId', data.sessionId); // Store in local storage
+            // Create a chat session
+            const chat = model.startChat({
+                history: conversationHistory.map(item => ({
+                    role: item.role,
+                    parts: [{ text: item.text }]
+                })),
+                generationConfig: {
+                    temperature: 1,
+                    topP: .95,
+                    topK: 40,
+                    maxOutputTokens: 8192,
                 }
+            });
 
-            } else {
-                setChatHistory(prev => [...prev, {
-                    role: 'gemini',
-                    message: "Sorry, I couldn't process your question."
-                }]);
+            // Add data context to the conversation if it's the first message
+            let fullPrompt = userQuestion;
+            if (conversationHistory.length === 0) {
+                fullPrompt = `Here is the data context I'll be working with:\n\n${dataContext}\n\nNow, to answer your question: ${userQuestion}`;
             }
+
+            // Send message to Gemini
+            const result = await chat.sendMessage(fullPrompt);
+            const responseText = result.response.text();
+
+            // Update chat history for UI
+            setChatHistory(prev => [...prev, { 
+                role: 'gemini', 
+                message: responseText 
+            }]);
+
+            // Update conversation history for Gemini context
+            setConversationHistory(prev => [
+                ...prev,
+                { role: "user", text: fullPrompt },
+                { role: "model", text: responseText }
+            ]);
+
         } catch (error) {
             console.error("Error answering question:", error);
             setChatHistory(prev => [...prev, {
@@ -332,43 +354,17 @@ const DataChatApp = () => {
         }
     };
 
-
     useEffect(() => {
-        // Retrieve session ID from local storage on component mount
-        const storedSessionId = localStorage.getItem('sessionId');
-        if (storedSessionId) {
-            setSessionId(storedSessionId);
-        }
-
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [chatHistory]);
 
-
     const handleClearChat = () => {
-        // Clear chat history and optionally clear the session
         setChatHistory([]);
-        // Optionally clear the session ID
-        setSessionId(null); // removes the session id
-
-        // Optionally remove session ID from local storage
-        localStorage.removeItem('sessionId');
-
-        // Optionally call the backend to clear the cache and session data
-        fetch(`${backendUrl}/clear-cache`, {
-            method: 'POST',
-        })
-            .then(response => {
-                if (response.ok) {
-                    console.log("Cache and session data cleared successfully on the backend.");
-                } else {
-                    console.error("Failed to clear cache and session data on the backend.");
-                }
-            })
-            .catch(error => {
-                console.error("Error clearing cache and session data:", error);
-            });
+        setConversationHistory([]);
+        localStorage.removeItem('chatHistory');
+        localStorage.removeItem('conversationHistory');
     };
 
     return (
@@ -403,7 +399,7 @@ const DataChatApp = () => {
                             </Box>
                         </Paper>
                     )}
-                     <Button
+                    <Button
                         variant="outlined"
                         color="primary"
                         onClick={handleClearChat}
