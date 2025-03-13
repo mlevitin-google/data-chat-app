@@ -4,19 +4,13 @@ import { Send } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Papa from 'papaparse';
-//import { GoogleGenerativeAI, HarmCategory } from "@google/generative-ai";
-import { GoogleGenerativeAI, HarmCategory } from "@google/generative-ai";
-import data1 from './data/h12025.csv';
-import data2 from './data/h22024.csv';
+import { GoogleGenerativeAI } from "@google/generative-ai";
 
 // Get API key from environment variable
-// IMPORTANT: In your .env file, prefix with REACT_APP_ for React to access it
-const API_KEY = process.env.REACT_APP_GEMINI_API_KEY || 'AIzaSyBmC_WFCdfdV-Bj_6i_EEwri5je6d4M3pE';
+const API_KEY = process.env.REACT_APP_GEMINI_API_KEY;
 
-// Initialize Gemini API
-const genAI = new GoogleGenerativeAI(API_KEY, {
-    harmCategories: [HarmCategory.HARM_CATEGORY_UNSPECIFIED, HarmCategory.HARM_CATEGORY_OTHER]
-  });
+// Initialize Gemini
+const genAI = new GoogleGenerativeAI(API_KEY);
 
 const theme = createTheme({
     palette: {
@@ -49,33 +43,22 @@ const theme = createTheme({
 });
 
 const DataChatApp = () => {
-    const [csvFile, setCsvFile] = useState(null);
-    const [dataStats1, setDataStats1] = useState(null);
-    const [dataStats2, setDataStats2] = useState(null);
-    const [jsonData1, setJsonData1] = useState(null);
-    const [jsonData2, setJsonData2] = useState(null);
-    const [summary, setSummary] = useState('');
     const [chatHistory, setChatHistory] = useState([]);
     const [currentQuestion, setCurrentQuestion] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const chatContainerRef = useRef(null);
-    const [conversationHistory, setConversationHistory] = useState([]);
-    const [sessionId, setSessionId] = useState(null);
-    const [sessionHistory, setSessionHistory] = useState([]);
+    const [model, setModel] = useState(null); // Store the Gemini model instance
+    const [chatSession, setChatSession] = useState(null); // Store the chat session
+    const [csvText1, setCsvText1] = useState(''); // Store raw CSV text
+    const [csvText2, setCsvText2] = useState('');
+    const [dataStats1, setDataStats1] = useState(null);
+    const [dataStats2, setDataStats2] = useState(null);
 
-    useEffect(() => {
-      const savedSessionId = localStorage.getItem('sessionId');
-      if (savedSessionId) {
-        setSessionId(savedSessionId);
-      } else {
-        const newSessionId = Math.random().toString(36).substring(2);
-        setSessionId(newSessionId);
-        localStorage.setItem('sessionId', newSessionId);
-      }
-    }, []);
 
-    // Helper function to compute data statistics
-    const computeDataStats = (data) => {
+    // --- File Loading (Client-Side) ---
+    // We no longer parse immediately.  We store the raw text.
+
+     const computeDataStats = (data) => {
         if (!data || data.length === 0) return null;
 
         const columnNames = Object.keys(data[0]);
@@ -151,265 +134,155 @@ const DataChatApp = () => {
         };
     };
 
-    const parseCSVData = async (csvData) => {
-        return new Promise((resolve, reject) => {
-            Papa.parse(csvData, {
-                header: true,
-                dynamicTyping: true,
-                complete: (results) => {
-                    if (results.data && results.data.length > 0) {
-                        // Filter out empty rows that PapaParse sometimes includes
-                        const cleanData = results.data.filter(row =>
-                            Object.values(row).some(val => val !== null && val !== '')
-                        );
-                        resolve(cleanData);
-                    } else {
-                        reject("No data parsed from CSV.");
-                    }
-                },
-                error: (error) => {
-                    reject(error);
-                }
-            });
-        });
-    };
 
     useEffect(() => {
-        const loadInitialData = async () => {
+        const loadData = async () => {
             try {
-                const response1 = await fetch(data1);
-                const text1 = await response1.text();
-                const parsedData1 = await parseCSVData(text1);
-                setJsonData1(parsedData1);
+                // Load CSV data as text
+                let loadedCsvText1, loadedCsvText2;
+
+                try {
+                    const response1 = await fetch('/data/h12025.csv'); // From public/data
+                    if (!response1.ok) throw new Error("Network response 1 was not ok");
+                    loadedCsvText1 = await response1.text();
+                } catch (error) {
+                    console.error("Error loading h12025.csv:", error);
+                    //NO FALLBACK
+                    return; //exit if error
+                }
+
+                try {
+                    const response2 = await fetch('/data/h22024.csv'); // From public/data
+                    if (!response2.ok) throw new Error("Network response 2 was not ok");
+                    loadedCsvText2 = await response2.text();
+                } catch (error) {
+                    console.error("Error loading h22024.csv:", error);
+                    //NO FALLBACK
+                    return; //exit if error
+                }
+
+                setCsvText1(loadedCsvText1);
+                setCsvText2(loadedCsvText2);
+
+                //parse for the stats
+                const parsedData1 = await Papa.parse(loadedCsvText1, {header: true, dynamicTyping: true}).data
+                const parsedData2 = await Papa.parse(loadedCsvText2, {header: true, dynamicTyping: true}).data
                 setDataStats1(computeDataStats(parsedData1));
-                
-                const response2 = await fetch(data2);
-                const text2 = await response2.text();
-                const parsedData2 = await parseCSVData(text2);
-                setJsonData2(parsedData2);
                 setDataStats2(computeDataStats(parsedData2));
 
-                console.log("Data1 stats:", computeDataStats(parsedData1));
-                console.log("Data2 stats:", computeDataStats(parsedData2));
+                // Initialize Gemini Model and Chat Session
+                const modelInstance = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
+                const chat = modelInstance.startChat();
+                setModel(modelInstance);
+                setChatSession(chat);
 
-                // Load conversation history from localStorage if available
-                const savedHistory = localStorage.getItem('chatHistory');
-                if (savedHistory) {
-                    setChatHistory(JSON.parse(savedHistory));
-                }
-
-                const savedConversation = localStorage.getItem('conversationHistory');
-                if (savedConversation) {
-                    setConversationHistory(JSON.parse(savedConversation));
-                }
-                 const savedHistorySession = localStorage.getItem('sessionHistory');
-                if (savedHistorySession) {
-                    setSessionHistory(JSON.parse(savedHistorySession));
-                }
             } catch (error) {
-                console.error("Error loading initial data:", error);
-                setJsonData1(null);
-                setDataStats1(null);
-                setJsonData2(null);
-                setDataStats2(null);
+                console.error("Error loading or initializing:", error);
             }
         };
 
-        loadInitialData();
-    }, []);
+        loadData();
 
-    // Save chat history to localStorage whenever it changes
-    useEffect(() => {
-        if (chatHistory.length > 0) {
-            localStorage.setItem('chatHistory', JSON.stringify(chatHistory));
-        }
-    }, [chatHistory]);
-
-    // Save conversation history to localStorage whenever it changes
-    useEffect(() => {
-        if (conversationHistory.length > 0) {
-            localStorage.setItem('conversationHistory', JSON.stringify(conversationHistory));
-        }
-    }, [conversationHistory]);
-
-    const resetState = () => {
-        setCsvFile(null);
-        setSummary('');
-        setChatHistory([]);
-        setConversationHistory([]);
-        
-        // Clear localStorage
-        localStorage.removeItem('chatHistory');
-        localStorage.removeItem('conversationHistory');
-    };
-
-    const handleSendQuestion = async () => {
-        if (!currentQuestion.trim()) return;
-
-        setIsProcessing(true);
-        const userQuestion = currentQuestion.trim();
-        setChatHistory(prev => [...prev, { role: 'user', message: userQuestion }]);
-        setCurrentQuestion('');
-
-        try {
-            // Prepare data context for the AI
-            let dataContext = "";
-            
-            if (jsonData1 && dataStats1) {
-                dataContext += `Dataset 1 (H1 2025):\n`;
-                dataContext += `- Rows: ${dataStats1.rowCount}\n`;
-                dataContext += `- Columns: ${dataStats1.colCount}\n`;
-                dataContext += `- Column Names: ${dataStats1.columnNames.join(', ')}\n\n`;
-                
-                // Include a sample of the data (first 20 rows)
-                dataContext += `Sample data from Dataset 1:\n`;
-                dataContext += JSON.stringify(jsonData1.slice(0, 20), null, 2) + "\n\n";
-            }
-            
-            if (jsonData2 && dataStats2) {
-                dataContext += `Dataset 2 (H2 2024):\n`;
-                dataContext += `- Rows: ${dataStats2.rowCount}\n`;
-                dataContext += `- Columns: ${dataStats2.colCount}\n`;
-                dataContext += `- Column Names: ${dataStats2.columnNames.join(', ')}\n\n`;
-                
-                // Include a sample of the data (first 20 rows)
-                dataContext += `Sample data from Dataset 2:\n`;
-                dataContext += JSON.stringify(jsonData2.slice(0, 20), null, 2) + "\n\n";
-            }
-
-            // Define system instruction
-            const systemInstruction = `
-                *** ONLY USE DATA FROM THE UNDERLYING DATASETS. DO NOT USE OTHER INFORMATION IN YOUR ANALYSIS ***
-
-                Role and Purpose:
-
-                    * You are an analyst on the CG&E sector team tasked with understanding insights from large datasets.
-                    * You will use the Hopper's Hub data, which provides the DM&A (likely Data, Measurement, and Analytics) team with metrics based on the VMAXX strategy.
-                    * Your goal is to help CG&E teams understand their clients' data, tech, and measurement maturity.
-                    * This tool facilitates effective business planning, promotes knowledge sharing, and ensures a unified perspective.
-
-                    Behaviors and Rules:
-
-                    1) Data Interpretation:
-                        a) Analyze the Hopper's Hub data to identify key insights and trends related to client maturity.
-                        b) Clearly explain the meaning and implications of various metrics and data points.
-                        c) Connect data insights to the VMAXX strategy and its goals.
-
-                    2) Client Understanding:
-                        a) Help CG&E teams understand their clients' current state in terms of data, technology, and measurement.
-                        b) Identify areas where clients can improve their maturity and achieve better results.
-                        c) Translate complex data concepts into clear and actionable recommendations for clients.
-
-                    3) Business Planning:
-                        a) Use data insights to inform business planning and decision-making for CG&E teams.
-                        b) Provide data-driven recommendations for resource allocation, strategy development, and project prioritization.
-                        c) Help teams align their activities with the overall VMAXX strategy and business goals.
-
-                    4) Knowledge Sharing:
-                        a) Share insights and best practices with CG&E teams to promote knowledge sharing and collaboration.
-                        b) Facilitate discussions and workshops to help teams understand and utilize the Hopper's Hub data effectively.
-                        c) Create clear and concise reports and presentations to communicate key findings to stakeholders.
-
-                    Tone and Style:
-
-                    * Maintain a professional and analytical tone.
-                    * Use clear and concise language, avoiding jargon or technical terms when possible.
-                    * Be objective and data-driven in your analysis and recommendations.
-                    * Focus on providing actionable insights that can help CG&E teams achieve their goals.
-                    
-                    *** ONLY USE DATA FROM THE UNDERLYING DATASETS. DO NOT USE OTHER INFORMATION IN YOUR ANALYSIS ***
-            `;
-
-            // Initialize the model
-            const model = genAI.getGenerativeModel({
-                model: "gemini-1.5-pro",
-                systemInstruction: systemInstruction,
-            });
-
-            // Create a chat session
-            const chat = model.startChat({
-                history: conversationHistory.map(item => ({
-                    role: item.role,
-                    parts: [{ text: item.text }]
-                })),
-                generationConfig: {
-                    temperature: 1,
-                    topP: .95,
-                    topK: 40,
-                    maxOutputTokens: 8192,
-                }
-            });
-            const chatSessionId = genAI.generateSessionId();
-            setSessionId(chatSessionId);
-            localStorage.setItem('sessionId', JSON.stringify(chatSessionId));
-
-            // Add data context to the conversation if it's the first message
-            let fullPrompt = userQuestion;
-            if (conversationHistory.length === 0) {
-                fullPrompt = `Here is the data context I'll be working with:\n\n${dataContext}\n\nNow, to answer your question: ${userQuestion}`;
-            }
-
-            // Send message to Gemini
-            const result = await chat.sendMessage(fullPrompt);
-            const responseText = result.response.text();
-            // Update chat history for UI
-            setChatHistory(prev => [...prev, { 
-                role: 'gemini', 
-                message: responseText 
-            }]);
-
-            // Update conversation history for Gemini context
-            setConversationHistory(prev => [
-                ...prev,
-                { role: "user", text: fullPrompt },
-                { role: "model", text: responseText }
-            ]);
-            const currentHistory = localStorage.getItem('sessionHistory');
-            if(currentHistory){
-                setSessionHistory(JSON.parse(currentHistory));
-            }
-            const history = sessionHistory;
-            if (history.length > 0) {
-                localStorage.setItem('sessionHistory', JSON.stringify(history));
-            }
-
-            // Update chat history for UI
-            setChatHistory(prev => [...prev, { 
-                role: 'gemini', 
-                message: responseText 
-            }]);
-
-            // Update conversation history for Gemini context
-            setConversationHistory(prev => [
-                ...prev,
-                { role: "user", text: fullPrompt },
-                { role: "model", text: responseText }
-            ]);
-
-        } catch (error) {
-            console.error("Error answering question:", error);
-            setChatHistory(prev => [...prev, {
-                role: 'gemini',
-                message: "Sorry, I couldn't process your question. This may be due to the dataset size or an unexpected API response. Please try again or rephrase your question."
-            }]);
-        } finally {
-            setIsProcessing(false);
-        }
-    };
-
-    useEffect(() => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [chatHistory]);
 
+
+
+    const handleSendQuestion = async () => {
+      if (!currentQuestion.trim() || !chatSession || !csvText1 || !csvText2) {
+        console.error("Not ready to send:", { currentQuestion, chatSession, csvText1, csvText2 });
+        return;
+      }
+
+      setIsProcessing(true);
+      const userQuestion = currentQuestion.trim();
+      setChatHistory(prev => [...prev, { role: 'user', message: userQuestion }]);
+      setCurrentQuestion('');
+
+      // --- Prepare the ENTIRE CSV content as strings ---
+      const dataContext = `
+        Here is the content of the first CSV file (H1 2025):
+        \`\`\`csv
+        ${csvText1}
+        \`\`\`
+
+        Here is the content of the second CSV file (H2 2024):
+        \`\`\`csv
+        ${csvText2}
+        \`\`\`
+      `;
+
+        // Define system instruction
+        const systemInstruction = `
+            *** ONLY USE DATA FROM THE UNDERLYING DATASETS. DO NOT USE OTHER INFORMATION IN YOUR ANALYSIS ***
+
+            Role and Purpose:
+
+                * You are an analyst on the CG&E sector team tasked with understanding insights from large datasets.
+                * Currently, the provided datasets (H1 2025 and H2 2024) contain HTML content related to a create-react-app setup and do not include meaningful performance data for client maturity analysis.
+                * Your goal is to acknowledge the nature of the current data and inform the user that meaningful analysis cannot be performed until relevant performance data is provided.
+
+            Behaviors and Rules:
+
+            1) Data Assessment:
+                a) Recognize that the current datasets contain HTML structure and lack performance metrics needed for maturity analysis.
+                b) Do not attempt to extract insights related to client maturity from the HTML content.
+
+            2) User Communication:
+                a) Clearly communicate to the user that the current data is not suitable for the intended analytical tasks.
+                b) Explain that performance data related to client maturity (e.g., data, technology, measurement metrics) is required for meaningful analysis.
+                c) If the user asks specific questions about potential future data, you can provide general information based on your training, but clearly state that this is speculative until the actual data is available.
+
+            Tone and Style:
+
+                * Maintain a professional and informative tone.
+                * Use clear and concise language.
+                * Be direct about the limitations of the current data.
+                * Offer to assist further once relevant data is available.
+
+            *** ONLY USE DATA FROM THE UNDERLYING DATASETS. DO NOT USE OTHER INFORMATION IN YOUR ANALYSIS ***
+        `;
+
+      // Construct the prompt *with* previous history.
+      let fullPrompt = "";
+      for (const message of chatHistory) {
+        fullPrompt += `${message.role}: ${message.message}\n`; // Add previous turns
+      }
+      fullPrompt += `user: ${dataContext}\n${userQuestion}`; // Now add the context and user question
+
+      console.log("Sending prompt to Gemini (truncated):", fullPrompt.substring(0, 500) + "..."); // Log a truncated version
+
+        const chat = model.startChat({
+            history: chatHistory.map(item => ({
+                role: item.role === 'user' ? 'user' : 'model', // Correct roles for Gemini
+                parts: [{ text: item.message }] // Correct structure
+            })),
+            generationConfig: {
+                temperature: 0.4,
+                topP: 0.95,
+                topK: 40,
+                maxOutputTokens: 8192,
+            }
+        });
+
+      try {
+        const result = await chat.sendMessage(fullPrompt); // Send the FULL PROMPT
+        const responseText = result.response.text();
+
+        setChatHistory(prev => [...prev, { role: 'gemini', message: responseText }]);
+      } catch (error) {
+        console.error("Error sending message:", error);
+        setChatHistory(prev => [...prev, { role: 'gemini', message: "Sorry, I encountered an error." }]);
+      } finally {
+        setIsProcessing(false);
+      }
+    };
+
     const handleClearChat = () => {
         setChatHistory([]);
-        setConversationHistory([]);
-        localStorage.removeItem('chatHistory');
-        localStorage.removeItem('conversationHistory');
-        localStorage.removeItem('sessionId');
-        localStorage.removeItem('sessionHistory')
+        // No need to reset model or chatSession; just clear history.
     };
 
     return (
@@ -422,9 +295,8 @@ const DataChatApp = () => {
                 maxWidth: '80vw',
                 minHeight: '100vh'
             }}>
-                <Grid item xs={12} md={3} sx={{ p: 2 }}>
+               <Grid item xs={12} md={3} sx={{ p: 2 }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>Data Chat</Typography>
-
                     {(dataStats1 || dataStats2) && (
                         <Paper elevation={3} sx={{ p: 2, mb: 3, backgroundColor: '#CFD8DC' }}>
                             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>Dataset Info</Typography>
@@ -436,15 +308,7 @@ const DataChatApp = () => {
                         </Paper>
                     )}
 
-                    {summary && (
-                        <Paper elevation={3} sx={{ p: 2, backgroundColor: '#CFD8DC' }}>
-                            <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>Summary</Typography>
-                            <Box sx={{ maxHeight: '300px', overflowY: 'auto' }}>
-                                <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary}</ReactMarkdown>
-                            </Box>
-                        </Paper>
-                    )}
-                    <Button
+                     <Button
                         variant="outlined"
                         color="primary"
                         onClick={handleClearChat}
@@ -525,7 +389,7 @@ const DataChatApp = () => {
                             placeholder="Ask a question about your data..."
                             fullWidth
                             variant="outlined"
-                            disabled={isProcessing || (!jsonData1 && !jsonData2)}
+                            disabled={isProcessing || !csvText1 || !csvText2}
                             sx={{ bgcolor: 'white' }}
                             onKeyDown={(e) => {
                                 if (e.key === 'Enter' && !e.shiftKey) {
@@ -536,7 +400,7 @@ const DataChatApp = () => {
                         />
                         <Button
                             onClick={handleSendQuestion}
-                            disabled={isProcessing || !currentQuestion.trim() || (!jsonData1 && !jsonData2)}
+                            disabled={isProcessing || !currentQuestion.trim() || !csvText1 || !csvText2}
                             variant="contained"
                             sx={{ whiteSpace: 'nowrap' }}
                         >
