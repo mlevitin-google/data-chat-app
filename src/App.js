@@ -4,7 +4,7 @@ import { Send } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Papa from 'papaparse';
-import { GoogleGenerativeAI } from "@google/generative-ai";
+import { GoogleGenerativeAI, HarmCategory } from "@google/generative-ai";
 import data1 from '/Users/mlevitin/Desktop/data-explorer/data-chat-app/src/h12025.csv';
 import data2 from '/Users/mlevitin/Desktop/data-explorer/data-chat-app/src/h22024.csv';
 
@@ -13,7 +13,9 @@ import data2 from '/Users/mlevitin/Desktop/data-explorer/data-chat-app/src/h2202
 const API_KEY = process.env.REACT_APP_GEMINI_API_KEY || 'AIzaSyBmC_WFCdfdV-Bj_6i_EEwri5je6d4M3pE';
 
 // Initialize Gemini API
-const genAI = new GoogleGenerativeAI(API_KEY);
+const genAI = new GoogleGenerativeAI(API_KEY, {
+    harmCategories: [HarmCategory.HARM_CATEGORY_UNSPECIFIED, HarmCategory.HARM_CATEGORY_OTHER]
+  });
 
 const theme = createTheme({
     palette: {
@@ -57,6 +59,23 @@ const DataChatApp = () => {
     const [isProcessing, setIsProcessing] = useState(false);
     const chatContainerRef = useRef(null);
     const [conversationHistory, setConversationHistory] = useState([]);
+    const [sessionId, setSessionId] = useState(null);
+    const [sessionHistory, setSessionHistory] = useState([]);
+
+    useEffect(() => {
+      const savedSessionId = localStorage.getItem('sessionId');
+      if (savedSessionId) {
+        setSessionId(savedSessionId);
+      } else {
+        const newSessionId = genAI.generateSessionId();
+        setSessionId(newSessionId);
+        localStorage.setItem('sessionId', JSON.stringify(newSessionId));
+      }
+    }, []);
+    const [sessionId, setSessionId] = useState(null);
+    const [sessionHistory, setSessionHistory] = useState([]);
+
+    // Helper function to compute data statistics
 
     // Helper function to compute data statistics
     const computeDataStats = (data) => {
@@ -185,6 +204,10 @@ const DataChatApp = () => {
                 const savedConversation = localStorage.getItem('conversationHistory');
                 if (savedConversation) {
                     setConversationHistory(JSON.parse(savedConversation));
+                }
+                 const savedHistorySession = localStorage.getItem('sessionHistory');
+                if (savedHistorySession) {
+                    setSessionHistory(JSON.parse(savedHistorySession));
                 }
             } catch (error) {
                 console.error("Error loading initial data:", error);
@@ -319,6 +342,9 @@ const DataChatApp = () => {
                     maxOutputTokens: 8192,
                 }
             });
+            const chatSessionId = genAI.generateSessionId();
+            setSessionId(chatSessionId);
+            localStorage.setItem('sessionId', JSON.stringify(chatSessionId));
 
             // Add data context to the conversation if it's the first message
             let fullPrompt = userQuestion;
@@ -329,6 +355,26 @@ const DataChatApp = () => {
             // Send message to Gemini
             const result = await chat.sendMessage(fullPrompt);
             const responseText = result.response.text();
+            // Update chat history for UI
+            setChatHistory(prev => [...prev, { 
+                role: 'gemini', 
+                message: responseText 
+            }]);
+
+            // Update conversation history for Gemini context
+            setConversationHistory(prev => [
+                ...prev,
+                { role: "user", text: fullPrompt },
+                { role: "model", text: responseText }
+            ]);
+            const currentHistory = localStorage.getItem('sessionHistory');
+            if(currentHistory){
+                setSessionHistory(JSON.parse(currentHistory));
+            }
+            const history = sessionHistory;
+            if (history.length > 0) {
+                localStorage.setItem('sessionHistory', JSON.stringify(history));
+            }
 
             // Update chat history for UI
             setChatHistory(prev => [...prev, { 
@@ -365,6 +411,8 @@ const DataChatApp = () => {
         setConversationHistory([]);
         localStorage.removeItem('chatHistory');
         localStorage.removeItem('conversationHistory');
+        localStorage.removeItem('sessionId');
+        localStorage.removeItem('sessionHistory')
     };
 
     return (
