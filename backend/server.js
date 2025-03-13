@@ -179,7 +179,7 @@ app.post('/ask-question', async (req, res) => {
 
         // Create generative model - using the same model as in the sample code
         const model = genAI.getGenerativeModel({
-            model: "gemini-2.0-flash-thinking-exp-01-21",  // Updated model name
+            model: "gemini-2.0-pro-exp-02-05",  // Updated model name
             systemInstruction: systemInstruction,
         });
 
