@@ -60,7 +60,6 @@ const DataChatApp = () => {
     const chatContainerRef = useRef(null);
     const [conversationHistory, setConversationHistory] = useState([]);
     const [sessionId, setSessionId] = useState(null);
-    const [sessionHistory, setSessionHistory] = useState([]);
 
     useEffect(() => {
       const savedSessionId = localStorage.getItem('sessionId');
@@ -69,10 +68,9 @@ const DataChatApp = () => {
       } else {
         const newSessionId = genAI.generateSessionId();
         setSessionId(newSessionId);
-        localStorage.setItem('sessionId', JSON.stringify(newSessionId));
+        localStorage.setItem('sessionId', newSessionId);
       }
     }, []);
-    const [sessionId, setSessionId] = useState(null);
     const [sessionHistory, setSessionHistory] = useState([]);
 
     // Helper function to compute data statistics
