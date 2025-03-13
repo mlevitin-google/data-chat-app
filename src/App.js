@@ -4,9 +4,10 @@ import { Send } from '@mui/icons-material';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Papa from 'papaparse';
+//import { GoogleGenerativeAI, HarmCategory } from "@google/generative-ai";
 import { GoogleGenerativeAI, HarmCategory } from "@google/generative-ai";
-import data1 from '/Users/mlevitin/Desktop/data-explorer/data-chat-app/src/h12025.csv';
-import data2 from '/Users/mlevitin/Desktop/data-explorer/data-chat-app/src/h22024.csv';
+import data1 from './data/h12025.csv';
+import data2 from './data/h22024.csv';
 
 // Get API key from environment variable
 // IMPORTANT: In your .env file, prefix with REACT_APP_ for React to access it
