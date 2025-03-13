@@ -5,8 +5,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import Papa from 'papaparse';
 import { GoogleGenerativeAI } from "@google/generative-ai";
-import data1 from './[CG&E DM&A Ops Pillar] 2025.H1 VMAXX Responses + Backend Data - H1 2025 Raw Data.csv';
-import data2 from './[CG&E DM&A Ops Pillar] 2025.H1 VMAXX Responses + Backend Data - H2 2024 Raw Data.csv';
+import data1 from '/Users/mlevitin/Desktop/data-explorer/data-chat-app/src/h12025.csv';
+import data2 from '/Users/mlevitin/Desktop/data-explorer/data-chat-app/src/h22024.csv';
 
 // Get API key from environment variable
 // IMPORTANT: In your .env file, prefix with REACT_APP_ for React to access it
