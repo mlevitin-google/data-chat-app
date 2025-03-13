@@ -47,8 +47,6 @@ const DataChatApp = () => {
     const [currentQuestion, setCurrentQuestion] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const chatContainerRef = useRef(null);
-    const [model, setModel] = useState(null); // Store the Gemini model instance
-    const [chatSession, setChatSession] = useState(null); // Store the chat session
     const [csvText1, setCsvText1] = useState(''); // Store raw CSV text
     const [csvText2, setCsvText2] = useState('');
     const [dataStats1, setDataStats1] = useState(null);
@@ -142,27 +140,19 @@ const DataChatApp = () => {
                 let loadedCsvText1, loadedCsvText2;
 
                 try {
-                    const response1 = await fetch('/data/h12025.csv'); // From public/data
-                    if (!response1.ok) throw new Error("Network response 1 was not ok");
-                    loadedCsvText1 = await response1.text();
-                } catch (error) {
-                    console.error("Error loading h12025.csv:", error);
-                    //NO FALLBACK
-                    return; //exit if error
-                 } // h12025.csv and h22024.csv are located in the public directory. The path used is relative to the public directory and should not include the base URL.
+                  const response = await fetch('http://localhost:3001/api/files')
 
-                try {
-                    const response2 = await fetch('/data/h22024.csv'); // From public/data
-                    if (!response2.ok) throw new Error("Network response 2 was not ok");
-                    loadedCsvText2 = await response2.text();
-                } catch (error) {
-                    console.error("Error loading h22024.csv:", error);
-                    //NO FALLBACK
-                    return; //exit if error
+                  const files = await response.json()
+
+                  loadedCsvText1 = files[0].text
+                  loadedCsvText2 = files[2].text
+
+                  setCsvText1(loadedCsvText1);
+                  setCsvText2(loadedCsvText2);
                 }
-
-                setCsvText1(loadedCsvText1);
-                setCsvText2(loadedCsvText2);
+                catch (error) {
+                  console.error("Error loading files:", error);
+                }
 
                 //parse for the stats
                 const parsedData1 = await Papa.parse(loadedCsvText1, {header: true, dynamicTyping: true}).data
@@ -170,11 +160,8 @@ const DataChatApp = () => {
                 setDataStats1(computeDataStats(parsedData1));
                 setDataStats2(computeDataStats(parsedData2));
 
-                // Initialize Gemini Model and Chat Session
-                const modelInstance = genAI.getGenerativeModel({ model: "gemini-2.0-flash" });
-                const chat = modelInstance.startChat();
-                setModel(modelInstance);
-                setChatSession(chat);
+            }
+        };
 
             } catch (error) {
                 console.error("Error loading or initializing:", error);
@@ -191,18 +178,26 @@ const DataChatApp = () => {
 
 
     const handleSendQuestion = async () => {
-      if (!currentQuestion.trim() || !chatSession || !csvText1 || !csvText2) {
-        console.error("Not ready to send:", { currentQuestion, chatSession, csvText1, csvText2 });
+    const handleSendQuestion = async () => {
+      if (!currentQuestion.trim() || !chatHistory || !csvText1 || !csvText2) {
+        console.error("Not ready to send:", { currentQuestion, chatHistory, csvText1, csvText2 });
         return;
       }
 
       setIsProcessing(true);
-      const userQuestion = currentQuestion.trim();
-      setChatHistory(prev => [...prev, { role: 'user', message: userQuestion }]);
+      setChatHistory(prev => [...prev, { role: 'user', message: currentQuestion.trim() }]);
       setCurrentQuestion('');
 
-      // --- Prepare the ENTIRE CSV content as strings ---
-      const dataContext = `
+      try {
+          const response = await fetch('http://localhost:3001/api/chat', {
+              method: 'POST',
+              headers: {
+                  'Content-Type': 'application/json'
+              },
+              body: JSON.stringify({ message: currentQuestion.trim(), history: chatHistory.map(item => ({
+                role: item.role === 'user' ? 'user' : 'model', // Correct roles for Gemini
+                parts: [{ text: item.message }] // Correct structure
+            })), dataContext: `
         Here is the content of the first CSV file (H1 2025):
         \`\`\`csv
         ${csvText1}
@@ -212,10 +207,7 @@ const DataChatApp = () => {
         \`\`\`csv
         ${csvText2}
         \`\`\`
-      `;
-
-        // Define system instruction
-        const systemInstruction = `
+      `, systemInstruction: `
             *** ONLY USE DATA FROM THE UNDERLYING DATASETS. DO NOT USE OTHER INFORMATION IN YOUR ANALYSIS ***
 
             Role and Purpose:
@@ -243,38 +235,19 @@ const DataChatApp = () => {
                 * Offer to assist further once relevant data is available.
 
             *** ONLY USE DATA FROM THE UNDERLYING DATASETS. DO NOT USE OTHER INFORMATION IN YOUR ANALYSIS ***
-        `;
-
-      // Construct the prompt *with* previous history.
-      let fullPrompt = "";
-      for (const message of chatHistory) {
-        fullPrompt += `${message.role}: ${message.message}\n`; // Add previous turns
+        ` }),
+          });
+          if (response.ok) {
+              const responseText = await response.text()
+              setChatHistory(prev => [...prev, { role: 'gemini', message: responseText }]);
+          }
+          else {
+              setChatHistory(prev => [...prev, { role: 'gemini', message: "Sorry, I encountered an error." }]);
+          }
       }
-      fullPrompt += `user: ${dataContext}\n${userQuestion}`; // Now add the context and user question
-
-      console.log("Sending prompt to Gemini (truncated):", fullPrompt.substring(0, 500) + "..."); // Log a truncated version
-
-        const chat = model.startChat({
-            history: chatHistory.map(item => ({
-                role: item.role === 'user' ? 'user' : 'model', // Correct roles for Gemini
-                parts: [{ text: item.message }] // Correct structure
-            })),
-            generationConfig: {
-                temperature: 0.4,
-                topP: 0.95,
-                topK: 40,
-                maxOutputTokens: 8192,
-            }
-        });
-
-      try {
-        const result = await chat.sendMessage(fullPrompt); // Send the FULL PROMPT
-        const responseText = result.response.text();
-
-        setChatHistory(prev => [...prev, { role: 'gemini', message: responseText }]);
-      } catch (error) {
-        console.error("Error sending message:", error);
-        setChatHistory(prev => [...prev, { role: 'gemini', message: "Sorry, I encountered an error." }]);
+      catch (error) {
+          console.error("Error sending message:", error);
+          setChatHistory(prev => [...prev, { role: 'gemini', message: "Sorry, I encountered an error." }]);
       } finally {
         setIsProcessing(false);
       }
