@@ -56,7 +56,7 @@ const DataChatApp = () => {
     // --- File Loading (Client-Side) ---
     // We no longer parse immediately.  We store the raw text.
 
-     const computeDataStats = (data) => {
+    const computeDataStats = (data) => {
         if (!data || data.length === 0) return null;
 
         const columnNames = Object.keys(data[0]);
@@ -140,31 +140,28 @@ const DataChatApp = () => {
                 let loadedCsvText1, loadedCsvText2;
 
                 try {
-                  const response = await fetch('http://localhost:3001/api/files')
+                    const response = await fetch('http://localhost:3001/api/files'); //Add semicolon
 
-                  const files = await response.json()
+                    const files = await response.json();
 
-                  loadedCsvText1 = files[0].text
-                  loadedCsvText2 = files[2].text
+                    loadedCsvText1 = files[0].text;
+                    loadedCsvText2 = files[2].text;
 
-                  setCsvText1(loadedCsvText1);
-                  setCsvText2(loadedCsvText2);
+                    setCsvText1(loadedCsvText1);
+                    setCsvText2(loadedCsvText2); //Add semicolon
                 }
                 catch (error) {
-                  console.error("Error loading files:", error);
+                    console.error("Error loading files:", error);
                 }
 
                 //parse for the stats
-                const parsedData1 = await Papa.parse(loadedCsvText1, {header: true, dynamicTyping: true}).data
-                const parsedData2 = await Papa.parse(loadedCsvText2, {header: true, dynamicTyping: true}).data
+                const parsedData1 = Papa.parse(loadedCsvText1, { header: true, dynamicTyping: true }).data;
+                const parsedData2 = Papa.parse(loadedCsvText2, { header: true, dynamicTyping: true }).data;
                 setDataStats1(computeDataStats(parsedData1));
                 setDataStats2(computeDataStats(parsedData2));
 
-            }
-        };
-
-            } catch (error) {
-                console.error("Error loading or initializing:", error);
+            } catch (error) { // Outer catch block added!
+                console.error("Error loading or parsing CSV data:", error);
             }
         };
 
@@ -173,31 +170,30 @@ const DataChatApp = () => {
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
-    }, [chatHistory]);
-
+    }, []); // Empty dependency array
 
 
     const handleSendQuestion = async () => {
-    const handleSendQuestion = async () => {
-      if (!currentQuestion.trim() || !chatHistory || !csvText1 || !csvText2) {
-        console.error("Not ready to send:", { currentQuestion, chatHistory, csvText1, csvText2 });
-        return;
-      }
+        if (!currentQuestion.trim() || !chatHistory || !csvText1 || !csvText2) {
+            console.error("Not ready to send:", { currentQuestion, chatHistory, csvText1, csvText2 });
+            return;
+        }
 
-      setIsProcessing(true);
-      setChatHistory(prev => [...prev, { role: 'user', message: currentQuestion.trim() }]);
-      setCurrentQuestion('');
+        setIsProcessing(true);
+        setChatHistory(prev => [...prev, { role: 'user', message: currentQuestion.trim() }]);
+        setCurrentQuestion('');
 
-      try {
-          const response = await fetch('http://localhost:3001/api/chat', {
-              method: 'POST',
-              headers: {
-                  'Content-Type': 'application/json'
-              },
-              body: JSON.stringify({ message: currentQuestion.trim(), history: chatHistory.map(item => ({
-                role: item.role === 'user' ? 'user' : 'model', // Correct roles for Gemini
-                parts: [{ text: item.message }] // Correct structure
-            })), dataContext: `
+        try {
+            const response = await fetch('http://localhost:3001/api/chat', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify({
+                    message: currentQuestion.trim(), history: chatHistory.map(item => ({
+                        role: item.role === 'user' ? 'user' : 'model', // Correct roles for Gemini
+                        parts: [{ text: item.message }] // Correct structure
+                    })), dataContext: `
         Here is the content of the first CSV file (H1 2025):
         \`\`\`csv
         ${csvText1}
@@ -235,22 +231,23 @@ const DataChatApp = () => {
                 * Offer to assist further once relevant data is available.
 
             *** ONLY USE DATA FROM THE UNDERLYING DATASETS. DO NOT USE OTHER INFORMATION IN YOUR ANALYSIS ***
-        ` }),
-          });
-          if (response.ok) {
-              const responseText = await response.text()
-              setChatHistory(prev => [...prev, { role: 'gemini', message: responseText }]);
-          }
-          else {
-              setChatHistory(prev => [...prev, { role: 'gemini', message: "Sorry, I encountered an error." }]);
-          }
-      }
-      catch (error) {
-          console.error("Error sending message:", error);
-          setChatHistory(prev => [...prev, { role: 'gemini', message: "Sorry, I encountered an error." }]);
-      } finally {
-        setIsProcessing(false);
-      }
+        `
+        }),
+            });
+            if (response.ok) {
+                const responseText = await response.text()
+                setChatHistory(prev => [...prev, { role: 'gemini', message: responseText }]);
+            }
+            else {
+                setChatHistory(prev => [...prev, { role: 'gemini', message: "Sorry, I encountered an error." }]);
+            }
+        }
+        catch (error) {
+            console.error("Error sending message:", error);
+            setChatHistory(prev => [...prev, { role: 'gemini', message: "Sorry, I encountered an error." }]);
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     const handleClearChat = () => {
@@ -268,7 +265,7 @@ const DataChatApp = () => {
                 maxWidth: '80vw',
                 minHeight: '100vh'
             }}>
-               <Grid item xs={12} md={3} sx={{ p: 2 }}>
+                <Grid item xs={12} md={3} sx={{ p: 2 }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>Data Chat</Typography>
                     {(dataStats1 || dataStats2) && (
                         <Paper elevation={3} sx={{ p: 2, mb: 3, backgroundColor: '#CFD8DC' }}>
@@ -281,7 +278,7 @@ const DataChatApp = () => {
                         </Paper>
                     )}
 
-                     <Button
+                    <Button
                         variant="outlined"
                         color="primary"
                         onClick={handleClearChat}
