@@ -44,6 +44,9 @@ You don't have to ever use `eject`. The curated feature set is suitable for smal
 You can learn more in the [Create React App documentation](https://facebook.github.io/create-react-app/docs/getting-started).
 
 To learn React, check out the [React documentation](https://reactjs.org/).
+### Data Files
+
+The data files (`h12025.csv` and `h22024.csv`) are located in the `public` directory. When using these files in your code, make sure to use a relative path, e.g. `/data/h12025.csv`, and not the full URL. The full URL will only work when deployed to a web server.
 
 ### Code Splitting
 
