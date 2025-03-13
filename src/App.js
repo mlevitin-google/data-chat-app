@@ -149,7 +149,7 @@ const DataChatApp = () => {
                     console.error("Error loading h12025.csv:", error);
                     //NO FALLBACK
                     return; //exit if error
-                }
+                 } // h12025.csv and h22024.csv are located in the public directory. The path used is relative to the public directory and should not include the base URL.
 
                 try {
                     const response2 = await fetch('/data/h22024.csv'); // From public/data
