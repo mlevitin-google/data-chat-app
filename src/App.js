@@ -48,17 +48,17 @@ const DataChatApp = () => {
     const [currentQuestion, setCurrentQuestion] = useState('');
     const [isProcessing, setIsProcessing] = useState(false);
     const chatContainerRef = useRef(null);
-    //const apiKey = process.env.REACT_APP_GEMINI_API_KEY;  // REMOVE THIS LINE. API KEY must not be in the frontend
-     const backendUrl = "http://localhost:3001"; //CHANGE to your backend url
+    const backendUrl = "http://localhost:3001"; //CHANGE to your backend url
+    const [sessionId, setSessionId] = useState(null);  // State for session ID
 
     // Helper function to compute data statistics
     const computeDataStats = (data) => {
         if (!data || data.length === 0) return null;
-        
+
         const columnNames = Object.keys(data[0]);
         const rowCount = data.length;
         const colCount = columnNames.length;
-        
+
         // Calculate data types and sample values for each column
         const columnStats = {};
         columnNames.forEach(col => {
@@ -66,7 +66,7 @@ const DataChatApp = () => {
             const nonNullValues = data
                 .map(row => row[col])
                 .filter(val => val !== null && val !== undefined && val !== '');
-                
+
             // Determine type
             let type = 'unknown';
             if (nonNullValues.length > 0) {
@@ -75,7 +75,7 @@ const DataChatApp = () => {
                 else if (nonNullValues.every(val => !isNaN(Date.parse(val)))) type = 'date';
                 else type = 'string';
             }
-            
+
             // Calculate numeric stats if applicable
             let numericStats = {};
             if (type === 'number') {
@@ -85,7 +85,7 @@ const DataChatApp = () => {
                     avg: nonNullValues.reduce((sum, val) => sum + val, 0) / nonNullValues.length
                 };
             }
-            
+
             // For string columns, get unique values and their counts if not too many
             let categoryInfo = {};
             if (type === 'string') {
@@ -105,10 +105,10 @@ const DataChatApp = () => {
                     };
                 }
             }
-            
+
             // Get sample values (up to 5)
             const sampleValues = nonNullValues.slice(0, 5);
-            
+
             columnStats[col] = {
                 type,
                 nonNullCount: nonNullValues.length,
@@ -118,7 +118,7 @@ const DataChatApp = () => {
                 ...categoryInfo
             };
         });
-        
+
         return {
             rowCount,
             colCount,
@@ -128,26 +128,26 @@ const DataChatApp = () => {
     };
 
     const parseCSVData = async (csvData) => {
-      return new Promise((resolve, reject) => {
-          Papa.parse(csvData, {
-              header: true,
-              dynamicTyping: true,
-              complete: (results) => {
-                  if (results.data && results.data.length > 0) {
-                      // Filter out empty rows that PapaParse sometimes includes
-                      const cleanData = results.data.filter(row =>
-                          Object.values(row).some(val => val !== null && val !== '')
-                      );
-                      resolve(cleanData);
-                  } else {
-                      reject("No data parsed from CSV.");
-                  }
-              },
-              error: (error) => {
-                  reject(error);
-              }
-          });
-      });
+        return new Promise((resolve, reject) => {
+            Papa.parse(csvData, {
+                header: true,
+                dynamicTyping: true,
+                complete: (results) => {
+                    if (results.data && results.data.length > 0) {
+                        // Filter out empty rows that PapaParse sometimes includes
+                        const cleanData = results.data.filter(row =>
+                            Object.values(row).some(val => val !== null && val !== '')
+                        );
+                        resolve(cleanData);
+                    } else {
+                        reject("No data parsed from CSV.");
+                    }
+                },
+                error: (error) => {
+                    reject(error);
+                }
+            });
+        });
     };
 
     useEffect(() => {
@@ -191,13 +191,13 @@ const DataChatApp = () => {
                         complete: (results) => {
                             if (results.data && results.data.length > 0) {
                                 // Filter out empty rows that PapaParse sometimes includes
-                                const cleanData = results.data.filter(row => 
+                                const cleanData = results.data.filter(row =>
                                     Object.values(row).some(val => val !== null && val !== '')
                                 );
-                                
+
                                 setJsonData1(cleanData);
                                 setDataStats1(computeDataStats(cleanData));
-                                
+
                                 console.log("Parsed data stats:", computeDataStats(cleanData));
                                 console.log("Sample (first 2 rows):", cleanData.slice(0, 2));
                             } else {
@@ -219,7 +219,7 @@ const DataChatApp = () => {
             resetState();
         }
     };
-    
+
     const resetState = () => {
         setCsvFile(null);
         setJsonData1(null);
@@ -227,10 +227,14 @@ const DataChatApp = () => {
         setJsonData2(null);
         setDataStats2(null);
         setSummary('');
+        setChatHistory([]); // Clear chat history as well
+        setSessionId(null); // Reset the session ID
+
+        localStorage.removeItem('sessionId'); // Optionally remove sessionId from localStorage
     };
 
     const summarizeData = async () => {
-       //This code does nothing in the project
+        //This code does nothing in the project
         if ((!jsonData1 || !dataStats1) && (!jsonData2 || !dataStats2)) return;
 
         setIsProcessing(true);
@@ -262,7 +266,7 @@ const DataChatApp = () => {
 
             prompt += `Provide a concise summary of each dataset, highlighting the nature and potential insights from each.`;
 
-           console.warn("This summarization function doesn't work at all.") //this has been removed to prevent confusion to future developers
+            console.warn("This summarization function doesn't work at all.") //this has been removed to prevent confusion to future developers
 
             // const response = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-pro-exp-02-05:generateContent?key=${apiKey}`, { // THIS CODE DOESN'T WORK
 
@@ -276,27 +280,41 @@ const DataChatApp = () => {
 
     const handleSendQuestion = async () => {
         if (!currentQuestion.trim()) return;
-        
+
         setIsProcessing(true);
         const userQuestion = currentQuestion.trim();
         setChatHistory(prev => [...prev, { role: 'user', message: userQuestion }]);
         setCurrentQuestion('');
 
         try {
-                console.log("requesting backend"); //check if code actually made it here
+            console.log("requesting backend"); //check if code actually made it here
+            console.log("Sending question to backend:", userQuestion);
+
+            const requestBody = {
+                question: userQuestion,
+                sessionId: sessionId,  // Include the session ID
+            };
+
             const response = await fetch(`${backendUrl}/ask-question`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
                 },
-                body: JSON.stringify({ question: userQuestion }), // Send the question to the backend
+                body: JSON.stringify(requestBody), // Send the question and session ID to the backend
             });
 
             const data = await response.json();
-              console.log("response", data) //check the response from the backend
+            console.log("response", data); //check the response from the backend
 
             if (data && data.answer) {
                 setChatHistory(prev => [...prev, { role: 'gemini', message: data.answer }]);
+
+                 // Update session ID if a new one is received
+                 if (data.sessionId && data.sessionId !== sessionId) {
+                    setSessionId(data.sessionId);
+                    localStorage.setItem('sessionId', data.sessionId); // Store in local storage
+                }
+
             } else {
                 setChatHistory(prev => [...prev, {
                     role: 'gemini',
@@ -314,11 +332,44 @@ const DataChatApp = () => {
         }
     };
 
+
     useEffect(() => {
+        // Retrieve session ID from local storage on component mount
+        const storedSessionId = localStorage.getItem('sessionId');
+        if (storedSessionId) {
+            setSessionId(storedSessionId);
+        }
+
         if (chatContainerRef.current) {
             chatContainerRef.current.scrollTop = chatContainerRef.current.scrollHeight;
         }
     }, [chatHistory]);
+
+
+    const handleClearChat = () => {
+        // Clear chat history and optionally clear the session
+        setChatHistory([]);
+        // Optionally clear the session ID
+        setSessionId(null); // removes the session id
+
+        // Optionally remove session ID from local storage
+        localStorage.removeItem('sessionId');
+
+        // Optionally call the backend to clear the cache and session data
+        fetch(`${backendUrl}/clear-cache`, {
+            method: 'POST',
+        })
+            .then(response => {
+                if (response.ok) {
+                    console.log("Cache and session data cleared successfully on the backend.");
+                } else {
+                    console.error("Failed to clear cache and session data on the backend.");
+                }
+            })
+            .catch(error => {
+                console.error("Error clearing cache and session data:", error);
+            });
+    };
 
     return (
         <ThemeProvider theme={theme}>
@@ -332,38 +383,18 @@ const DataChatApp = () => {
             }}>
                 <Grid item xs={12} md={3} sx={{ p: 2 }}>
                     <Typography variant="h5" sx={{ fontWeight: 'bold', mb: 2 }}>Data Chat</Typography>
-                                      
+
                     {(dataStats1 || dataStats2) && (
                         <Paper elevation={3} sx={{ p: 2, mb: 3, backgroundColor: '#CFD8DC' }}>
                             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>Dataset Info</Typography>
-                            <Typography>File 1: N/A</Typography>
-                            <Typography>Size 1: N/A</Typography>
                             <Typography>Rows 1: {dataStats1?.rowCount || 'N/A'}</Typography>
                             <Typography>Columns 1: {dataStats1?.colCount || 'N/A'}</Typography>
 
-                            <Typography>File 2: N/A</Typography>
-                            <Typography>Size 2: N/A</Typography>
                             <Typography>Rows 2: {dataStats2?.rowCount || 'N/A'}</Typography>
                             <Typography>Columns 2: {dataStats2?.colCount || 'N/A'}</Typography>
-                            <Button
-                                onClick={summarizeData}
-                                disabled={isProcessing || (!jsonData1 && !jsonData2)}
-                                variant="contained"
-                                fullWidth
-                                sx={{ mt: 2 }}
-                            >
-                                {isProcessing ? (
-                                    <>
-                                        <CircularProgress size={20} sx={{ mr: 1 }} />
-                                        Summarizing...
-                                    </>
-                                ) : (
-                                    "Summarize Data"
-                                )}
-                            </Button>
                         </Paper>
                     )}
-                    
+
                     {summary && (
                         <Paper elevation={3} sx={{ p: 2, backgroundColor: '#CFD8DC' }}>
                             <Typography variant="h6" sx={{ fontWeight: 'bold', mb: 1 }}>Summary</Typography>
@@ -372,12 +403,21 @@ const DataChatApp = () => {
                             </Box>
                         </Paper>
                     )}
+                     <Button
+                        variant="outlined"
+                        color="primary"
+                        onClick={handleClearChat}
+                        disabled={isProcessing}
+                        sx={{ mt: 2, mb: 2 }}
+                    >
+                        Clear Chat
+                    </Button>
                 </Grid>
 
                 <Grid item xs={12} md={9} sx={{ p: 2, display: 'flex', flexDirection: 'column', height: '90vh' }}>
-                    <Paper elevation={3} sx={{ 
-                        flex: 1, 
-                        display: 'flex', 
+                    <Paper elevation={3} sx={{
+                        flex: 1,
+                        display: 'flex',
                         flexDirection: 'column',
                         p: 2,
                         backgroundColor: '#ECEFF1',
@@ -385,9 +425,9 @@ const DataChatApp = () => {
                         overflow: 'hidden'
                     }}>
                         <Typography variant="h6" sx={{ mb: 2 }}>Chat with Your Data</Typography>
-                        
+
                         <Box
-                            sx={{ 
+                            sx={{
                                 flex: 1,
                                 overflowY: 'auto',
                                 display: 'flex',
@@ -400,11 +440,11 @@ const DataChatApp = () => {
                             {chatHistory.length === 0 && (
                                 <Paper elevation={1} sx={{ p: 2, bgcolor: '#E8EAF6', alignSelf: 'center', maxWidth: '80%' }}>
                                     <Typography variant="body1">
-                                       Welcome to Hoppers Hub AI! Feel free to ask me questions about the data from the H2 2024 and H1 2025 Hopper's Hub reports
+                                        Welcome to Hoppers Hub AI! Feel free to ask me questions about the data from the H2 2024 and H1 2025 Hopper's Hub reports
                                     </Typography>
                                 </Paper>
                             )}
-                            
+
                             {chatHistory.map((message, index) => (
                                 <Paper
                                     key={index}
@@ -420,10 +460,10 @@ const DataChatApp = () => {
                                     <ReactMarkdown remarkPlugins={[remarkGfm]}>{message.message}</ReactMarkdown>
                                 </Paper>
                             ))}
-                            
+
                             {isProcessing && (
-                                <Paper elevation={1} sx={{ 
-                                    p: 2, 
+                                <Paper elevation={1} sx={{
+                                    p: 2,
                                     borderRadius: 2,
                                     alignSelf: 'flex-start',
                                     backgroundColor: '#E0E0E0',
@@ -436,7 +476,7 @@ const DataChatApp = () => {
                             )}
                         </Box>
                     </Paper>
-                    
+
                     <Box sx={{ display: 'flex', gap: 1 }}>
                         <TextField
                             value={currentQuestion}
