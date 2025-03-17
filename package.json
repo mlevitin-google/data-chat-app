@@ -15,7 +15,9 @@
   "type": "commonjs",
   "main": "app.js",
   "scripts": {
-    "test": "echo \"Error: no test specified\" && exit 1"
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "start:frontend": "react-app-rewired start",
+    "start:backend": "node backend/server.js"
   },
   "dependencies": {
     "abab": "^2.0.6",

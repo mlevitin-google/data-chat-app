@@ -5,6 +5,7 @@ const {
 } = require("@google/generative-ai");
 const { GoogleAIFileManager } = require("@google/generative-ai/server");
 const express = require('express')
+const app = express()
 const cors = require('cors')
 const dotenv = require('dotenv')
 
@@ -72,9 +73,9 @@ async function run() {
   // TODO Make these files available on the local file system
   // You may need to update the file paths
   const files = [
-    await uploadToGemini("[CG&E DM&A Ops Pillar] 2025.H1 VMAXX Responses + Backend Data - H1 2025 Raw Data.csv", "text/csv"),
-    await uploadToGemini("CG&E_DM&A___Hopper's_Hub_(go_hoppershub) (1).pdf", "application/pdf"),
-    await uploadToGemini("[CG&E DM&A Ops Pillar] 2025.H1 VMAXX Responses + Backend Data - H2 2024 Raw Data.csv", "text/csv"),
+     await uploadToGemini("./[CG&E DM&A Ops Pillar] 2025.H1 VMAXX Responses + Backend Data - H1 2025 Raw Data.csv", "text/csv"),
+    await uploadToGemini("./CG&E_DM&A___Hopper's_Hub_(go_hoppershub) (1).pdf", "application/pdf"),
+     await uploadToGemini("./[CG&E DM&A Ops Pillar] 2025.H1 VMAXX Responses + Backend Data - H2 2024 Raw Data.csv", "text/csv"),
   ];
 
   // Some files have a processing delay. Wait for them to be ready.
